@@ -29,6 +29,16 @@ int symlink(const char *, const char *);
 ssize_t readlink(const char *, char *, size_t);
 unsigned sleep(unsigned);
 int sched_yield(void);
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+#define F_OK 0
+#define X_OK 1
+#define W_OK 2
+#define R_OK 4
+int access(const char *, int);
+int isatty(int);
+int ftruncate(int, off_t);
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2

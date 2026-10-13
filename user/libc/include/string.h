@@ -14,5 +14,14 @@ char *strcat(char *, const char *);
 char *strchr(const char *, int);
 char *strrchr(const char *, int);
 char *strdup(const char *);
+char *strndup(const char *, size_t);
+void *memchr(const void *, int, size_t);
+char *strstr(const char *, const char *);
+char *strtok(char *, const char *);
+char *strtok_r(char *, const char *, char **);
+char *strpbrk(const char *, const char *);
+size_t strspn(const char *, const char *);
+size_t strcspn(const char *, const char *);
+char *strncat(char *, const char *, size_t);
 char *strerror(int);
 #endif

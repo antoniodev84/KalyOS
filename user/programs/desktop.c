@@ -149,7 +149,7 @@ static int refresh(struct gui *g) {
                     struct application *app = &next.apps[next.count++];
                     strcpy(app->path, candidate);
                     strncpy(app->name, name, sizeof(app->name) - 1);
-                    strncpy(app->item.label, name, sizeof(app->item.label) - 1);
+                    strncpy(app->item.label, !strcmp(name, "rotating-cube") ? "Rotating Cube" : name, sizeof(app->item.label) - 1);
                 }
                 if (closedir(dir)) {
                     perror(directory);
@@ -178,7 +178,7 @@ static int refresh(struct gui *g) {
         next.apps[i].item.id = i;
     }
     char status[64];
-    snprintf(status, sizeof(status), "%u apps%s%s", next.count, limited ? " (limite)" : "",
+    snprintf(status, sizeof(status), "%u apps%s%s", next.count, limited ? " (limit)" : "",
              errors ? " (erro PATH)" : "");
     if (publish(g, &next, status)) {
         free(next.apps);
@@ -206,16 +206,16 @@ static void launch_item(struct gui *g, const struct kwm_event *event) {
     }
     if (!app) {
         fprintf(stderr, "desktop: menu entry expired; open the menu again\n");
-        if (publish(g, &current, "Atualize o menu")) {
+        if (publish(g, &current, "Refresh the menu")) {
             perror("menu status");
         }
         return;
     }
     int pid = app->item.flags & KWM_APP_SYSTEM ? launch(app->path, app->item.id)
-                                               : gui_launch("/bin/terminal", app->path);
+                                               : (!strcmp(app->name, "rotating-cube") ? gui_launch(app->path, NULL) : gui_launch("/bin/terminal", app->path));
     if (pid < 0) {
         perror(app->path);
-        if (publish(g, &current, "Falha ao abrir aplicativo")) {
+        if (publish(g, &current, "Application launch failed")) {
             perror("menu status");
         }
     } else {
@@ -248,7 +248,7 @@ int main(void) {
             } else if (e.type == KWM_MENU_REFRESH || e.type == KWM_OVERFLOW) {
                 if (refresh(&g)) {
                     perror("desktop catalog refresh");
-                    if (publish(&g, &current, "Falha ao atualizar PATH")) {
+                    if (publish(&g, &current, "PATH refresh failed")) {
                         perror("menu status");
                     }
                 }

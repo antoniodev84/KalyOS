@@ -1,0 +1,32 @@
+Third-party components
+
+- **chibicc**, Rui Ueyama, MIT. Source: https://github.com/rui314/chibicc,
+  revision `90d1f7f199cc55b13c7fdb5839d1409806633fdb`.
+  License: `user/chibicc/LICENSE`. This is an altered KalyOS port: native tool
+  paths, static linking and assembly output adapted for kaly-as.
+- **xcc**, tyfkda, MIT. Source: https://github.com/tyfkda/xcc,
+  revision `9eea241c1331d54730b9173cfb11c4dea7c893a4`.
+  License: `user/xcc/LICENSE`. This is an altered KalyOS port of its assembler,
+  linker and utilities: comments, two-operand IMUL, ELF mapping/relocations,
+  object detection and subsection collection. The SDK `ar.h` and `elf.h`
+  derive from this MIT distribution; the same license applies to those copies.
+- **TinyGL**, Fabrice Bellard, Gek (DMHSW), C-Chads, permissive zlib-style license.
+  Source: https://github.com/C-Chads/tinygl,
+  revision `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`.
+  License: `user/kalygl/vendor/tinygl/LICENSE`. KalyGL acknowledges the original
+  renderer and authors. This is an altered source distribution, not upstream:
+  features enable error checking and polygons; readback, depth clearing,
+  viewport bounds and query errors are adapted; renderer/version strings
+  identify KalyGL. Context/presentation adaptation is in `user/kalygl/src`.
+  The unused SDL examples were removed from the working tree and are not built
+  or linked. No SDL dependency is introduced.
+
+Original license files and copyright notices are preserved. TinyCC is not a
+project dependency and is not included in this distribution.
+
+The vendored working trees are reduced to the C sources and headers required
+by the KalyOS build plus compiler builtin headers and original license notices.
+Vendor Git histories, frontend/libc components of xcc, other architectures,
+demos, documentation, tests and unused build tooling are not distributed.
+Only the root KalyOS Git repository is retained. user/libc is the sole libc
+implementation; its same PIC objects produce libc.a and libc.so.

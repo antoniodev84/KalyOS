@@ -300,6 +300,22 @@ static long sys_fcntl(struct syscall_args *a) {
         return -EINVAL;
     }
 }
+static long sys_clock_gettime(struct syscall_args *a) {
+    if (a->a != 0 && a->a != 1) {
+        return -EINVAL;
+    }
+    uint64_t now = ticks;
+    int64_t result[2] = {a->a == 0 ? (int64_t)kernel_time() : (int64_t)(now / 100),
+                         (int64_t)(now % 100) * 10000000};
+    return copy_to_user(a->b, result, sizeof(result)) ? -EFAULT : 0;
+}
+static long sys_time(struct syscall_args *a) {
+    int64_t now = kernel_time();
+    if (a->a && copy_to_user(a->a, &now, sizeof(now))) {
+        return -EFAULT;
+    }
+    return now;
+}
 struct syscall_entry {
     unsigned number;
     handler call;
@@ -318,8 +334,8 @@ static const struct syscall_entry calls[] = {
     {84, sys_rmdir, true},     {86, sys_link, true},      {87, sys_unlink, true},
     {88, sys_symlink, true},   {89, sys_readlink, true},  {90, sys_chmod, true},
     {105, sys_setuid, false},  {165, sys_mount, true},    {166, sys_umount, true},
-    {217, sys_getdents, true}, {72, sys_fcntl, true}};
-_Static_assert(sizeof(calls) / sizeof(calls[0]) == 38, "syscalls");
+    {217, sys_getdents, true}, {72, sys_fcntl, true}, {201, sys_time, false}, {228, sys_clock_gettime, false}};
+_Static_assert(sizeof(calls) / sizeof(calls[0]) == 40, "syscalls");
 static int vector_copy(uint64_t user, char ***result) {
     char **v = kalloc(65 * sizeof(*v));
     if (!v) {

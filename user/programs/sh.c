@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
@@ -13,6 +14,18 @@ static int last_status;
 static int builtin(struct command *c) {
     if (!c->argc) {
         return 0;
+    }
+    if (!strcmp(c->argv[0], "exec")) {
+        if (c->argc < 2) {
+            return 0;
+        }
+        execve(c->argv[1], c->argv + 1, environ);
+        if (errno == ENOENT && !strchr(c->argv[1], '/')) {
+            execvp(c->argv[1], c->argv + 1);
+        }
+        perror(c->argv[1]);
+        last_status = 127;
+        return 1;
     }
     if (!strcmp(c->argv[0], "exit")) {
         exit(c->argc > 1 ? atoi(c->argv[1]) : last_status);

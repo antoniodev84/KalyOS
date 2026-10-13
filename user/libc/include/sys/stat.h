@@ -9,6 +9,15 @@ struct stat {
     int64_t st_atime, st_atime_ns, st_mtime, st_mtime_ns, st_ctime, st_ctime_ns;
     int64_t reserved[3];
 };
+#define S_IRUSR 0400
+#define S_IWUSR 0200
+#define S_IXUSR 0100
+#define S_IRGRP 0040
+#define S_IWGRP 0020
+#define S_IXGRP 0010
+#define S_IROTH 0004
+#define S_IWOTH 0002
+#define S_IXOTH 0001
 #define S_IFMT 0170000
 #define S_IFDIR 0040000
 #define S_IFREG 0100000

@@ -27,7 +27,7 @@ KERNEL_C := $(shell find kernel -name '*.c' | sort)
 KERNEL_ASM := $(shell find kernel -name '*.asm' | sort) boot/entry.asm
 KERNEL_OBJECTS := $(KERNEL_C:%.c=build/%.o) $(KERNEL_ASM:%.asm=build/%.o) build/boot/ap_blob.o
 LIB_C := $(filter-out user/libc/src/start.c,$(shell find user/libc/src -name '*.c' | sort))
-LIB_OBJECTS := $(LIB_C:%.c=build/%.o) build/user/libc/src/gui_font.o
+LIB_OBJECTS := $(LIB_C:%.c=build/%.o) build/user/libc/src/gui_font.o build/user/libc/src/setjmp.o
 PROGRAMS := init sh kalybox desktop terminal files notes
 COMMANDS := echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat udp nslookup pendrive sound shutdown window init
 .SECONDARY: $(addprefix build/user/programs/,$(addsuffix .o,$(PROGRAMS)))
@@ -72,13 +72,25 @@ build/user/ld-kaly.so: build/user/programs/ld.o build/user/programs/ld_entry.o b
 	$(LD) -m elf_x86_64 -shared -Bsymbolic --hash-style=both -z noexecstack -e _dl_entry -o $@ $^
 build/user/hello: build/user/programs/hello.o build/user/libc/src/crt0.o build/libc.so
 	$(LD) -m elf_x86_64 -pie --hash-style=both -z noexecstack --dynamic-linker /lib/ld-kaly.so -o $@ $(filter %.o,$^) -Lbuild -lc
-build/initramfs.cpio: $(addprefix build/user/,$(PROGRAMS)) build/user/hello build/user/ld-kaly.so build/libc.a build/libc.so tools/initramfs.py
+build/initramfs.cpio: $(addprefix build/user/,$(PROGRAMS)) build/user/hello build/user/ld-kaly.so build/libc.a build/libc.so build/user/chibicc-bin build/user/kaly-as build/user/kaly-ld build/user/rotating-cube build/libkalygl.a build/libkalygfx.a tools/initramfs.py
 	mkdir -p build/root/{bin,lib,dev,tmp,proc,sys,mnt,home}
 	chmod 755 build/root build/root/{bin,lib,dev,proc,sys,mnt,home}
 	chmod 1777 build/root/tmp
 	cp build/user/init build/root/init
 	cp $(addprefix build/user/,$(filter-out init,$(PROGRAMS))) build/user/hello build/root/bin/
 	cp build/libc.a build/libc.so build/user/ld-kaly.so build/root/lib/
+	cp build/user/libc/src/crt0.o build/root/lib/crt0.o
+	cp build/user/chibicc-bin build/root/bin/chibicc
+	cp build/user/kaly-as build/user/kaly-ld build/root/bin/
+	mkdir -p build/root/usr/include/chibicc
+	cp -r user/libc/include/. build/root/usr/include/
+	cp -r shared/include/. build/root/usr/include/
+	cp user/chibicc/include/*.h build/root/usr/include/chibicc/
+	cp user/programs/hello_world.c build/root/home/hello.c
+	cp user/programs/rotating_cube.c build/root/home/cube.c
+	cp build/user/rotating-cube build/root/bin/
+	cp build/libkalygl.a build/libkalygfx.a build/root/lib/
+	cp -r user/kalygfx/include/. user/kalygl/include/. build/root/usr/include/
 	chmod 755 build/root/init build/root/bin/* build/root/lib/ld-kaly.so
 	chmod 644 build/root/lib/{libc.a,libc.so}
 	for cmd in $(COMMANDS); do ln -sf kalybox build/root/bin/$$cmd; done
@@ -112,3 +124,46 @@ run-graphic:
 	$(MAKE) run QEMU_DISPLAY=gtk QEMU_AUDIO=pa
 clean:
 	rm -rf build
+
+CHIBICC_SRCS := $(wildcard user/chibicc/*.c)
+CHIBICC_OBJECTS := $(CHIBICC_SRCS:%.c=build/%.o)
+XCC_COMMON := user/xcc/src/util/util.c user/xcc/src/util/table.c user/xcc/src/util/bin_util.c
+XCC_AS_SRCS := $(wildcard user/xcc/src/as/*.c user/xcc/src/as/arch/x64/*.c) $(XCC_COMMON)
+XCC_LD_SRCS := $(wildcard user/xcc/src/ld/*.c) user/xcc/src/util/archive.c $(XCC_COMMON)
+build/user/chibicc/%.o: user/chibicc/%.c $(wildcard user/chibicc/*.h)
+	@mkdir -p $(@D)
+	$(CC) $(filter-out -Werror,$(UCFLAGS)) -Wno-sign-compare -Wno-unused-parameter -c $< -o $@
+build/user/xcc/%.o: user/xcc/%.c $(shell find user/xcc/src user/libc/include -name "*.h")
+	@mkdir -p $(@D)
+	$(CC) $(filter-out -Werror,$(UCFLAGS)) -Iuser/xcc/src/util -Iuser/xcc/src/as -Wno-unused-parameter -Wno-sign-compare -c $< -o $@
+build/user/chibicc-bin: $(CHIBICC_OBJECTS) build/user/libc/src/crt0.o build/libc.a user/linker.ld
+	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
+build/user/kaly-as: $(XCC_AS_SRCS:%.c=build/%.o) build/user/libc/src/crt0.o build/libc.a user/linker.ld
+	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
+build/user/kaly-ld: $(XCC_LD_SRCS:%.c=build/%.o) build/user/libc/src/crt0.o build/libc.a user/linker.ld
+	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
+
+TINYGL_SRCS := $(wildcard user/kalygl/vendor/tinygl/src/*.c)
+KALYGL_SRCS := $(wildcard user/kalygl/src/*.c)
+KALYGFX_SRCS := $(wildcard user/kalygfx/src/*.c)
+GFX_HEADERS := $(shell find user/kalygl/include user/kalygfx/include user/kalygfx/src user/kalygl/vendor/tinygl/include -name "*.h") user/kalygl/vendor/tinygl/src/zgl.h
+GFXFLAGS := $(filter-out -fPIC,$(UCFLAGS)) -fno-pic -fno-pie -Iuser/kalygfx/include -Iuser/kalygl/include
+build/user/kalygl/vendor/tinygl/src/%.o: user/kalygl/vendor/tinygl/src/%.c $(GFX_HEADERS)
+	@mkdir -p $(@D)
+	$(CC) $(filter-out -Werror,$(GFXFLAGS)) -Wno-unused-parameter -Wno-unused-function -Iuser/kalygl/vendor/tinygl/include -c $< -o $@
+build/user/kalygl/src/%.o: user/kalygl/src/%.c $(GFX_HEADERS)
+	@mkdir -p $(@D)
+	$(CC) $(GFXFLAGS) -Wno-unused-function -c $< -o $@
+build/user/kalygfx/src/%.o: user/kalygfx/src/%.c $(GFX_HEADERS)
+	@mkdir -p $(@D)
+	$(CC) $(GFXFLAGS) -c $< -o $@
+build/libkalygl.a: $(TINYGL_SRCS:%.c=build/%.o) $(KALYGL_SRCS:%.c=build/%.o)
+	$(AR) rcs $@ $^
+build/libkalygfx.a: $(KALYGFX_SRCS:%.c=build/%.o)
+	$(AR) rcs $@ $^
+
+build/user/programs/rotating_cube.o: user/programs/rotating_cube.c user/kalygfx/include/KalyGFX.h user/kalygl/include/GL/gl.h
+	@mkdir -p $(@D)
+	$(CC) $(GFXFLAGS) -c $< -o $@
+build/user/rotating-cube: build/user/programs/rotating_cube.o build/user/libc/src/crt0.o build/libkalygl.a build/libkalygfx.a build/libc.a user/linker.ld
+	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
