@@ -1,4 +1,4 @@
-#include "kaly.h"
+#include "gfx.h"
 extern const uint8_t console_font[], console_font_end[];
 static uint8_t *pixels;
 static unsigned width, height, pitch, depth, red, green, blue, rbits, gbits, bbits;
@@ -9,7 +9,7 @@ static uint32_t utf8_codepoint, utf8_minimum;
 static unsigned utf8_remaining;
 static int pointer_x, pointer_y;
 static uint32_t saved[16 * 16];
-static bool pointer_visible;
+static bool pointer_visible, graphics;
 static struct lock fb_lock;
 static uint32_t pixel_get(unsigned x, unsigned y) {
     uint8_t *p = pixels + y * pitch + x * depth;
@@ -59,7 +59,7 @@ unsigned framebuffer_height(void) {
     return pixels ? height : 768;
 }
 void framebuffer_pointer(int x, int y) {
-    if (!pixels) {
+    if (!pixels || graphics) {
         return;
     }
     lock(&fb_lock);
@@ -87,7 +87,7 @@ static void draw(unsigned codepoint) {
     }
 }
 void framebuffer_putc(char c) {
-    if (!pixels) {
+    if (!pixels || graphics) {
         return;
     }
     lock(&fb_lock);
@@ -286,4 +286,43 @@ void framebuffer_init(uint64_t info) {
         }
         t += ALIGN_UP(size, 8);
     }
+}
+
+bool framebuffer_available(void) {
+    return pixels != NULL;
+}
+unsigned framebuffer_font_width(void) {
+    return fw;
+}
+unsigned framebuffer_font_height(void) {
+    return fh;
+}
+const uint8_t *framebuffer_glyph(unsigned codepoint) {
+    unsigned c = codepoint < 65536 ? unicode_map[codepoint] : 0xffff;
+    if (c == 0xffff || c >= glyph_count) {
+        c = unicode_map['?'];
+    }
+    if (c == 0xffff || c >= glyph_count) {
+        c = 0;
+    }
+    return glyphs + c * glyph_size;
+}
+void framebuffer_graphics(bool enabled) {
+    lock(&fb_lock);
+    pointer_hide();
+    graphics = enabled;
+    unlock(&fb_lock);
+}
+void framebuffer_present(const uint32_t *canvas, int x, int y, int w, int h) {
+    if (!pixels) {
+        return;
+    }
+    lock(&fb_lock);
+    for (int j = MAX(0, y); j < MIN((int)height, y + h); j++) {
+        for (int i = MAX(0, x); i < MIN((int)width, x + w); i++) {
+            uint32_t c = canvas[j * width + i];
+            pixel(i, j, color((c >> 16) & 255, (c >> 8) & 255, c & 255));
+        }
+    }
+    unlock(&fb_lock);
 }

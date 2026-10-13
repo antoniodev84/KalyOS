@@ -28,10 +28,13 @@ static void keyboard_report(struct usb_device *device, const uint8_t *report, un
             unsigned index = key - 4;
             bool upper = key < 30 ? shift != device->caps_lock : shift;
             char character = upper ? shifted[index] : plain[index];
-            if ((report[0] & 0x11) && character >= 'a' && character <= 'z') {
-                character -= 'a' - 1;
+            if ((report[0] & 0x11) && ((character >= 'a' && character <= 'z') ||
+                                       (character >= 'A' && character <= 'Z'))) {
+                character &= 31;
             }
             input_enqueue(character);
+        } else if (key == 0x4c) {
+            input_enqueue(127);
         } else if (key >= 0x4f && key <= 0x52) {
             input_enqueue(27);
             input_enqueue('[');

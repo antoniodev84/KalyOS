@@ -1,19 +1,50 @@
 #include "kaly.h"
+#include <kaly/system.h>
 struct process processes[MAX_PROC];
 volatile uint64_t ticks;
 static struct lock sched_lock;
 static unsigned cursor;
-static int next_pid = 1;
-static struct process *reserve_process(void) {
+static unsigned next_pid = 11;
+static bool start_gui;
+static struct process *reserve_process(unsigned requested_pid) {
     lock(&sched_lock);
     struct process *p = NULL;
+    if (requested_pid) {
+        for (unsigned i = 0; i < MAX_PROC; i++) {
+            if (processes[i].state && processes[i].pid == (int)requested_pid) {
+                unlock(&sched_lock);
+                return NULL;
+            }
+        }
+    }
+    if (!requested_pid) {
+        for (unsigned attempt = 0; attempt <= MAX_PROC; attempt++) {
+            unsigned candidate = next_pid;
+            next_pid = next_pid == 0x7fffffff ? 11 : next_pid + 1;
+            bool occupied = false;
+            for (unsigned i = 0; i < MAX_PROC; i++) {
+                if (processes[i].state && processes[i].pid == (int)candidate) {
+                    occupied = true;
+                    break;
+                }
+            }
+            if (!occupied) {
+                requested_pid = candidate;
+                break;
+            }
+        }
+        if (!requested_pid) {
+            unlock(&sched_lock);
+            return NULL;
+        }
+    }
     for (unsigned i = 0; i < MAX_PROC; i++) {
         if (!processes[i].state) {
             p = &processes[i];
             memset(p, 0, sizeof(*p));
             p->cpu = -1;
             p->state = PROC_SLEEP;
-            p->pid = next_pid++;
+            p->pid = requested_pid;
             break;
         }
     }
@@ -45,7 +76,7 @@ void process_cleanup(struct process *p) {
     unlock(&sched_lock);
 }
 int process_spawn(const char *path) {
-    struct process *p = reserve_process();
+    struct process *p = reserve_process(!strcmp(path, "/init") ? 1 : 0);
     if (!p) {
         return -ENOMEM;
     }
@@ -63,7 +94,10 @@ int process_spawn(const char *path) {
     return p->pid;
 }
 int process_fork(struct frame *f) {
-    struct process *parent = this_cpu()->current, *p = reserve_process();
+    struct process *parent = this_cpu()->current;
+    unsigned requested = parent->system_child_pid;
+    parent->system_child_pid = 0;
+    struct process *p = reserve_process(requested);
     if (!p) {
         return -ENOMEM;
     }
@@ -113,6 +147,8 @@ int process_exec(const char *path, const char *const *argv, const char *const *e
         }
     }
     unlock(&fs_lock);
+    wm_process_exit(p->pid);
+    p->system_child_pid = 0;
     uint64_t old = p->cr3;
     p->cr3 = replacement.cr3;
     p->brk = replacement.brk;
@@ -188,6 +224,7 @@ void process_account(void) {
 }
 struct frame *process_exit(struct frame *f, int status) {
     struct process *p = this_cpu()->current;
+    wm_process_exit(p->pid);
     lock(&fs_lock);
     vfs_process_close(p);
     unlock(&fs_lock);
@@ -273,4 +310,57 @@ struct frame *schedule_finish(struct frame *frame) {
         return process_exit(frame, 139);
     }
     return frame;
+}
+
+long system_ioctl(unsigned long request, uint64_t address) {
+    if (request != KSYSTEM_IOCTL) {
+        return -25;
+    }
+    struct ksystem_request r;
+    if (user_range(address, sizeof(r), true) || copy_from_user(&r, address, sizeof(r))) {
+        return -EFAULT;
+    }
+    if (r.version != KSYSTEM_VERSION) {
+        return -EINVAL;
+    }
+    struct process *p = this_cpu()->current;
+    long result = 0;
+    lock(&sched_lock);
+    switch (r.operation) {
+    case KSYSTEM_RESERVE_PID:
+        if (p->uid || r.pid < 2 || r.pid > 10 ||
+            !((p->pid == 1 && r.pid != 4 && r.pid != 5) || (p->pid == 3 && r.pid == 4) ||
+              (p->pid == 4 && r.pid == 5))) {
+            result = -EPERM;
+            break;
+        }
+        for (unsigned i = 0; i < MAX_PROC; i++) {
+            if (processes[i].state && processes[i].pid == (int)r.pid) {
+                result = -EBUSY;
+                break;
+            }
+        }
+        if (!result) {
+            p->system_child_pid = r.pid;
+        }
+        break;
+    case KSYSTEM_START_GUI:
+        start_gui = true;
+        break;
+    case KSYSTEM_POLL_GUI:
+        if (p->pid != 1 || p->uid) {
+            result = -EPERM;
+        } else {
+            r.flags = start_gui;
+            start_gui = false;
+        }
+        break;
+    default:
+        result = -EINVAL;
+    }
+    unlock(&sched_lock);
+    if (!result && copy_to_user(address, &r, sizeof(r))) {
+        result = -EFAULT;
+    }
+    return result;
 }

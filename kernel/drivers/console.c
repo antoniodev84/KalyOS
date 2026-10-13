@@ -72,7 +72,7 @@ void console_write(const char *s, size_t n) {
     }
     unlock(&output_lock);
 }
-void input_enqueue(uint8_t c) {
+static void console_enqueue(uint8_t c) {
     lock(&queue_lock);
     unsigned next = (head + 1) % sizeof(input);
     if (next == tail) {
@@ -83,12 +83,19 @@ void input_enqueue(uint8_t c) {
     head = next;
     unlock(&queue_lock);
 }
+void input_enqueue(uint8_t c) {
+    if (wm_active()) {
+        wm_key(c);
+    } else {
+        console_enqueue(c);
+    }
+}
 int console_read(char *s, size_t n) {
     lock(&input_lock);
     keyboard_poll();
     while (inb(0x3fd) & 1) {
         uint8_t c = inb(0x3f8);
-        input_enqueue(c == '\r' ? '\n' : c);
+        console_enqueue(c == '\r' ? '\n' : c);
     }
     size_t done = 0;
     lock(&queue_lock);

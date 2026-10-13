@@ -264,26 +264,62 @@ static long sys_reboot(struct syscall_args *a) {
 static long sys_getdents(struct syscall_args *a) {
     return vfs_getdents(a->a, a->b, a->c);
 }
+static long sys_fcntl(struct syscall_args *a) {
+    struct process *p = self();
+    struct file *f = a->a < MAX_FD ? p->fds[a->a] : NULL;
+    if (!f) {
+        return -EBADF;
+    }
+    switch (a->b) {
+    case 0:
+    case 1030:
+        if (a->c >= MAX_FD) {
+            return -EINVAL;
+        }
+        for (unsigned i = a->c; i < MAX_FD; i++) {
+            if (!p->fds[i]) {
+                long r = vfs_dup(a->a, i);
+                if (r >= 0 && a->b == 1030) {
+                    p->fd_flags[i] = O_CLOEXEC;
+                }
+                return r;
+            }
+        }
+        return -24;
+    case 1:
+        return p->fd_flags[a->a] & O_CLOEXEC ? 1 : 0;
+    case 2:
+        p->fd_flags[a->a] = a->c & 1 ? O_CLOEXEC : 0;
+        return 0;
+    case 3:
+        return f->flags;
+    case 4:
+        f->flags = (f->flags & ~(O_APPEND | 2048)) | (a->c & (O_APPEND | 2048));
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
 struct syscall_entry {
     unsigned number;
     handler call;
     bool filesystem;
 };
 static const struct syscall_entry calls[] = {
-    {169, sys_reboot, false}, {0, sys_read, true},       {1, sys_write, true},
-    {2, sys_open, true},      {3, sys_close, true},      {4, sys_stat, true},
-    {5, sys_fstat, true},     {6, sys_lstat, true},      {8, sys_lseek, true},
-    {9, sys_mmap, true},      {10, sys_mprotect, false}, {11, sys_munmap, false},
-    {12, sys_brk, false},     {22, sys_pipe, true},      {102, sys_getuid, false},
-    {24, NULL, false},        {33, sys_dup2, true},      {35, NULL, false},
-    {39, sys_getpid, false},  {57, NULL, false},         {59, NULL, false},
-    {60, NULL, false},        {61, NULL, false},         {63, sys_uname, false},
-    {79, sys_getcwd, true},   {80, sys_chdir, true},     {83, sys_mkdir, true},
-    {84, sys_rmdir, true},    {86, sys_link, true},      {87, sys_unlink, true},
-    {88, sys_symlink, true},  {89, sys_readlink, true},  {90, sys_chmod, true},
-    {105, sys_setuid, false}, {165, sys_mount, true},    {166, sys_umount, true},
-    {217, sys_getdents, true}};
-_Static_assert(sizeof(calls) / sizeof(calls[0]) == 37, "syscalls");
+    {169, sys_reboot, false},  {0, sys_read, true},       {1, sys_write, true},
+    {2, sys_open, true},       {3, sys_close, true},      {4, sys_stat, true},
+    {5, sys_fstat, true},      {6, sys_lstat, true},      {8, sys_lseek, true},
+    {9, sys_mmap, true},       {10, sys_mprotect, false}, {11, sys_munmap, false},
+    {12, sys_brk, false},      {22, sys_pipe, true},      {102, sys_getuid, false},
+    {24, NULL, false},         {33, sys_dup2, true},      {35, NULL, false},
+    {39, sys_getpid, false},   {57, NULL, false},         {59, NULL, false},
+    {60, NULL, false},         {61, NULL, false},         {63, sys_uname, false},
+    {79, sys_getcwd, true},    {80, sys_chdir, true},     {83, sys_mkdir, true},
+    {84, sys_rmdir, true},     {86, sys_link, true},      {87, sys_unlink, true},
+    {88, sys_symlink, true},   {89, sys_readlink, true},  {90, sys_chmod, true},
+    {105, sys_setuid, false},  {165, sys_mount, true},    {166, sys_umount, true},
+    {217, sys_getdents, true}, {72, sys_fcntl, true}};
+_Static_assert(sizeof(calls) / sizeof(calls[0]) == 38, "syscalls");
 static int vector_copy(uint64_t user, char ***result) {
     char **v = kalloc(65 * sizeof(*v));
     if (!v) {
@@ -402,6 +438,10 @@ struct frame *syscall_dispatch(struct frame *f) {
         struct file *file = args.a < MAX_FD ? self()->fds[args.a] : NULL;
         if (!file) {
             result = -EBADF;
+        } else if (file->node->device == 8) {
+            result = system_ioctl(args.b, args.c);
+        } else if (file->node->device == 7) {
+            result = wm_ioctl(args.b, args.c);
         } else if (file->node->device == 5) {
             result = hda_ioctl(args.b, args.c);
         } else if (file && file->node->device == 6 && args.b == 0x5501) {

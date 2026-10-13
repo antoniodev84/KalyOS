@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <errno.h>
+int window_command(const char *, int, char **);
 int hardware_command(const char *, int, char **);
 static int failure(const char *s) {
     perror(s);
@@ -155,12 +156,16 @@ int main(int argc, char **argv) {
         if (argc == 1) {
             puts("echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch "
                  "sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat "
-                 "nslookup pendrive sound shutdown");
+                 "nslookup pendrive sound shutdown window init");
             return 0;
         }
         argc--;
         argv++;
         cmd = argv[0];
+    }
+    int window_result = window_command(cmd, argc, argv);
+    if (window_result >= 0) {
+        return window_result;
     }
     int hardware_result = hardware_command(cmd, argc, argv);
     if (hardware_result >= 0) {

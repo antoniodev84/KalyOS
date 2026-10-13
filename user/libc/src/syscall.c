@@ -172,3 +172,14 @@ int execvp(const char *file, char *const argv[]) {
     strcat(path, file);
     return execve(path, argv, environ);
 }
+
+int fcntl(int fd, int command, ...) {
+    long argument = 0;
+    if (command != F_GETFL && command != F_GETFD) {
+        va_list ap;
+        va_start(ap, command);
+        argument = va_arg(ap, int);
+        va_end(ap);
+    }
+    return syscall(72, fd, command, argument, 0, 0, 0);
+}

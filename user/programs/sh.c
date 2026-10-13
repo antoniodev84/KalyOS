@@ -141,7 +141,8 @@ static int parse(char *line) {
         while (*p == ' ' || *p == '\t' || *p == '\n') {
             p++;
         }
-        if (!*p) {
+        if (!*p || *p == '#') {
+            p += strlen(p);
             break;
         }
         operators[ntokens] = 0;

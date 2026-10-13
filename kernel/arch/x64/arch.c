@@ -64,6 +64,7 @@ struct frame *interrupt_dispatch(struct frame *f) {
         if (!c->index) {
             hda_poll();
             usb_poll();
+            wm_poll();
             net_poll();
             process_tick();
         }

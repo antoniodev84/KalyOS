@@ -1,6 +1,7 @@
 #include "kaly.h"
 extern void input_enqueue(uint8_t);
-static bool shift, caps;
+static bool shift, caps, ctrl, extended;
+static struct lock keyboard_lock;
 static const char normal[128] = {
     [1] = 27,    [2] = '1',  [3] = '2',  [4] = '3',   [5] = '4',  [6] = '5',   [7] = '6',
     [8] = '7',   [9] = '8',  [10] = '9', [11] = '0',  [12] = '-', [13] = '=',  [14] = '\b',
@@ -15,10 +16,39 @@ static const char shifted[128] = {
     [9] = '*',  [10] = '(', [11] = ')', [12] = '_', [13] = '+', [26] = '{', [27] = '}',
     [39] = ':', [40] = '"', [41] = '~', [43] = '|', [51] = '<', [52] = '>', [53] = '?'};
 void keyboard_poll(void) {
+    if (__atomic_exchange_n(&keyboard_lock.value, 1, __ATOMIC_ACQUIRE)) {
+        return;
+    }
     while (inb(0x64) & 1) {
         uint8_t status = inb(0x64), code = inb(0x60);
         if (status & 32) {
             touchpad_byte(code);
+            continue;
+        }
+        if (code == 0xe0) {
+            extended = true;
+            continue;
+        }
+        if (code == 29 || code == 157) {
+            ctrl = code == 29;
+            extended = false;
+            continue;
+        }
+        if (extended) {
+            extended = false;
+            char arrow = code == 72   ? 'A'
+                         : code == 80 ? 'B'
+                         : code == 77 ? 'C'
+                         : code == 75 ? 'D'
+                                      : 0;
+            if (code == 83) {
+                input_enqueue(127);
+            }
+            if (arrow) {
+                input_enqueue(27);
+                input_enqueue('[');
+                input_enqueue(arrow);
+            }
             continue;
         }
         if (code == 42 || code == 54) {
@@ -44,8 +74,12 @@ void keyboard_poll(void) {
         } else if (shift && shifted[code]) {
             c = shifted[code];
         }
+        if (ctrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+            c &= 31;
+        }
         if (c) {
             input_enqueue(c);
         }
     }
+    unlock(&keyboard_lock);
 }

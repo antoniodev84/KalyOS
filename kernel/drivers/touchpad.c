@@ -47,7 +47,11 @@ void input_pointer(int x, int y, unsigned keys, bool abs) {
     event(0, 0, 0);
     pointer_x = MAX(0, MIN(pointer_x, (int)framebuffer_width() - 1));
     pointer_y = MAX(0, MIN(pointer_y, (int)framebuffer_height() - 1));
-    framebuffer_pointer(pointer_x, pointer_y);
+    if (wm_active()) {
+        wm_pointer(pointer_x, pointer_y, keys);
+    } else {
+        framebuffer_pointer(pointer_x, pointer_y);
+    }
     unlock(&event_lock);
 }
 void input_pointer_absolute(int x, int y, unsigned keys) {
@@ -63,7 +67,11 @@ void input_pointer_absolute(int x, int y, unsigned keys) {
     }
     buttons = keys;
     event(0, 0, 0);
-    framebuffer_pointer(pointer_x, pointer_y);
+    if (wm_active()) {
+        wm_pointer(pointer_x, pointer_y, keys);
+    } else {
+        framebuffer_pointer(pointer_x, pointer_y);
+    }
     unlock(&event_lock);
 }
 void input_wheel(int value) {
@@ -72,6 +80,7 @@ void input_wheel(int value) {
     }
     lock(&event_lock);
     event(2, 8, value);
+    wm_wheel(value);
     event(0, 0, 0);
     unlock(&event_lock);
 }

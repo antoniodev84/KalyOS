@@ -21,25 +21,26 @@ AR := llvm-ar
 OBJCOPY := llvm-objcopy
 NASM := nasm
 CFLAGS := -m64 -std=gnu11 -O2 -g -ffreestanding -fno-builtin -fno-stack-protector -fno-asynchronous-unwind-tables -fno-unwind-tables -mno-red-zone -mgeneral-regs-only -Wall -Wextra -Werror
-KCFLAGS := $(CFLAGS) -fno-pie -Ikernel/include
-UCFLAGS := $(filter-out -mgeneral-regs-only,$(CFLAGS)) -fPIC -Iuser/libc/include
+KCFLAGS := $(CFLAGS) -fno-pie -Ikernel/include -Ishared/include
+UCFLAGS := $(filter-out -mgeneral-regs-only,$(CFLAGS)) -fPIC -Iuser/libc/include -Ishared/include
 KERNEL_C := $(shell find kernel -name '*.c' | sort)
 KERNEL_ASM := $(shell find kernel -name '*.asm' | sort) boot/entry.asm
 KERNEL_OBJECTS := $(KERNEL_C:%.c=build/%.o) $(KERNEL_ASM:%.asm=build/%.o) build/boot/ap_blob.o
 LIB_C := $(filter-out user/libc/src/start.c,$(shell find user/libc/src -name '*.c' | sort))
-LIB_OBJECTS := $(LIB_C:%.c=build/%.o)
-PROGRAMS := init sh kalybox
-COMMANDS := echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat udp nslookup pendrive sound shutdown
+LIB_OBJECTS := $(LIB_C:%.c=build/%.o) build/user/libc/src/gui_font.o
+PROGRAMS := init sh kalybox desktop terminal files notes
+COMMANDS := echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat udp nslookup pendrive sound shutdown window init
+.SECONDARY: $(addprefix build/user/programs/,$(addsuffix .o,$(PROGRAMS)))
 .PHONY: all iso disk run run-graphic clean
 QEMU_DISPLAY ?= none
 QEMU_AUDIO ?= none
 all: build/KalyOS.iso build/disk.img
 iso: build/KalyOS.iso
 disk: build/disk.img
-build/kernel/%.o: kernel/%.c $(wildcard kernel/include/*.h)
+build/kernel/%.o: kernel/%.c $(wildcard kernel/include/*.h shared/include/kaly/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(KCFLAGS) -c $< -o $@
-build/kernel/assets/font.o: kernel/assets/console.psf
+build/kernel/assets/font.o build/user/libc/src/gui_font.o: kernel/assets/console.psf
 build/%.o: %.asm
 	@mkdir -p $(@D)
 	$(NASM) -f elf64 $< -o $@
@@ -52,7 +53,7 @@ build/boot/ap_blob.o: build/boot/ap.bin
 build/kernel.elf: $(KERNEL_OBJECTS) boot/linker.ld
 	$(LD) -m elf_x86_64 -nostdlib -z noexecstack -T boot/linker.ld -o $@ $(KERNEL_OBJECTS)
 	grub-file --is-x86-multiboot2 $@
-build/user/%.o: user/%.c $(shell find user/libc/include -type f)
+build/user/%.o: user/%.c $(shell find user/libc/include shared/include -type f)
 	@mkdir -p $(@D)
 	$(CC) $(UCFLAGS) -c $< -o $@
 build/libc.a: $(LIB_OBJECTS) build/user/libc/src/start.o
@@ -63,7 +64,9 @@ build/user/init: build/user/programs/init.o build/user/libc/src/crt0.o build/lib
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
 build/user/sh: build/user/programs/sh.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
-build/user/kalybox: build/user/programs/dns_command.o build/user/programs/sound_command.o build/user/programs/hardware_commands.o build/user/programs/kalybox.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
+build/user/kalybox: build/user/programs/window_command.o build/user/programs/dns_command.o build/user/programs/sound_command.o build/user/programs/hardware_commands.o build/user/programs/kalybox.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
+	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
+build/user/%: build/user/programs/%.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
 build/user/ld-kaly.so: build/user/programs/ld.o build/user/programs/ld_entry.o build/libc.a
 	$(LD) -m elf_x86_64 -shared -Bsymbolic --hash-style=both -z noexecstack -e _dl_entry -o $@ $^
@@ -74,9 +77,9 @@ build/initramfs.cpio: $(addprefix build/user/,$(PROGRAMS)) build/user/hello buil
 	chmod 755 build/root build/root/{bin,lib,dev,proc,sys,mnt,home}
 	chmod 1777 build/root/tmp
 	cp build/user/init build/root/init
-	cp build/user/sh build/user/kalybox build/user/hello build/root/bin/
+	cp $(addprefix build/user/,$(filter-out init,$(PROGRAMS))) build/user/hello build/root/bin/
 	cp build/libc.a build/libc.so build/user/ld-kaly.so build/root/lib/
-	chmod 755 build/root/init build/root/bin/{sh,kalybox,hello} build/root/lib/ld-kaly.so
+	chmod 755 build/root/init build/root/bin/* build/root/lib/ld-kaly.so
 	chmod 644 build/root/lib/{libc.a,libc.so}
 	for cmd in $(COMMANDS); do ln -sf kalybox build/root/bin/$$cmd; done
 	python3 tools/initramfs.py build/root $@

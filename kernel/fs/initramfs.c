@@ -90,6 +90,16 @@ void vfs_init(uint64_t info) {
         panic("usb node");
     }
     n->device = 6;
+    n = node_new("wm", S_IFCHR | 0666, dev);
+    if (!n) {
+        panic("wm node");
+    }
+    n->device = 7;
+    n = node_new("system", S_IFCHR | 0666, dev);
+    if (!n) {
+        panic("system node");
+    }
+    n->device = 8;
     n = node_new("event0", S_IFCHR | 0444, dev);
     if (!n) {
         panic("input node");

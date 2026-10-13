@@ -19,6 +19,7 @@ void kernel_main(uint64_t info, uint64_t magic) {
     usb_init();
     block_scan_partitions();
     vfs_init(info);
+    wm_init();
     int pid = process_spawn("/init");
     if (pid < 0) {
         kprintf("init error %u\n", (uint64_t)-pid);

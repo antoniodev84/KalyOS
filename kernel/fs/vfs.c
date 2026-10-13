@@ -302,7 +302,7 @@ static void put_file(struct file *f) {
 long vfs_open(const char *path, int flags, unsigned mode) {
     int e, fd;
     if ((flags & 3) == 3 || (flags & ~(3 | O_CREAT | 128 | O_TRUNC | O_APPEND | O_DIRECTORY |
-                                       O_NOFOLLOW | O_CLOEXEC))) {
+                                       O_NOFOLLOW | O_CLOEXEC | 2048))) {
         return -EINVAL;
     }
     for (fd = 0; fd < MAX_FD && current()->fds[fd]; fd++)

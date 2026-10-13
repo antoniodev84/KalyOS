@@ -221,6 +221,7 @@ struct process {
     struct frame *frame;
     struct file *fds[MAX_FD];
     unsigned fd_flags[MAX_FD];
+    unsigned system_child_pid;
     struct node *cwd;
     char name[32];
     uint64_t retry_syscall;
@@ -346,4 +347,15 @@ void ext2_release(struct extfs *);
 int elf_load(struct process *, const char *, const char *const *, const char *const *,
              struct frame *);
 void syscall_init(void);
+
+long system_ioctl(unsigned long, uint64_t);
+void wm_init(void);
+void wm_poll(void);
+bool wm_active(void);
+void wm_key(uint8_t);
+void wm_pointer(int, int, unsigned);
+void wm_wheel(int);
+void wm_process_exit(int);
+long wm_ioctl(unsigned long, uint64_t);
+
 #endif
