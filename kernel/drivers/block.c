@@ -19,3 +19,31 @@ int block_read(struct blockdev *d, uint64_t l, uint32_t n, void *b) {
 int block_write(struct blockdev *d, uint64_t l, uint32_t n, const void *b) {
     return transfer(d, l, n, (void *)b, true);
 }
+
+void block_publish(void) {
+    if (!root) {
+        return;
+    }
+    int error;
+    struct node *dev = vfs_resolve("/dev", root, true, &error);
+    if (!dev) {
+        return;
+    }
+    for (struct blockdev *d = block_devices; d; d = d->next) {
+        bool present = false;
+        for (struct node *n = dev->children; n; n = n->next) {
+            if (!strcmp(n->name, d->name)) {
+                present = true;
+            }
+        }
+        if (present) {
+            continue;
+        }
+        struct node *n = node_new(d->name, S_IFBLK | 0600, dev);
+        if (!n) {
+            kprintf("Block device node allocation failed\n");
+            return;
+        }
+        n->size = d->sectors * d->sector_size;
+    }
+}

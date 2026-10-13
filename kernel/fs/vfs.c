@@ -1,4 +1,4 @@
-#include "kaly.h"
+#include "net.h"
 struct node *root;
 struct lock fs_lock;
 static uint32_t next_ino = 1;
@@ -273,6 +273,10 @@ static void put_file(struct file *f) {
     }
     struct node *n = node_actual(f->node);
     n->refs--;
+    if (n->socket && !n->refs) {
+        net_socket_close(n->socket);
+        n->socket = NULL;
+    }
     if ((n->mode & S_IFMT) == S_IFIFO) {
         if (f->flags & 3) {
             n->writers--;
@@ -410,7 +414,8 @@ static long file_io(int fd, uint64_t user, size_t len, bool write) {
         }
     }
     kfree(buf);
-    if ((f->node->mode & S_IFMT) != S_IFCHR && (f->node->mode & S_IFMT) != S_IFIFO) {
+    if (!f->node->socket && (f->node->mode & S_IFMT) != S_IFCHR &&
+        (f->node->mode & S_IFMT) != S_IFIFO) {
         f->offset = off + done;
     }
     if (!write && !done && e == 0 && f->node->device == 1) {
@@ -429,7 +434,8 @@ long vfs_seek(int fd, int64_t off, int whence) {
         return -EBADF;
     }
     struct file *f = current()->fds[fd];
-    if ((f->node->mode & S_IFMT) == S_IFCHR || (f->node->mode & S_IFMT) == S_IFIFO) {
+    if (f->node->socket || (f->node->mode & S_IFMT) == S_IFCHR ||
+        (f->node->mode & S_IFMT) == S_IFIFO) {
         return -29;
     }
     if (f->node->ext) {

@@ -18,6 +18,7 @@ void keyboard_poll(void) {
     while (inb(0x64) & 1) {
         uint8_t status = inb(0x64), code = inb(0x60);
         if (status & 32) {
+            touchpad_byte(code);
             continue;
         }
         if (code == 42 || code == 54) {

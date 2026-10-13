@@ -6,6 +6,10 @@ header:
     dd 0
     dd header_end - header
     dd -(0xe85250d6 + (header_end - header))
+    dw 5, 1
+    dd 20
+    dd 1024, 768, 32
+    ALIGN 8
     dw 0, 0
     dd 8
 header_end:

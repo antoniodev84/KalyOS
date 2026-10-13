@@ -29,14 +29,17 @@ KERNEL_OBJECTS := $(KERNEL_C:%.c=build/%.o) $(KERNEL_ASM:%.asm=build/%.o) build/
 LIB_C := $(filter-out user/libc/src/start.c,$(shell find user/libc/src -name '*.c' | sort))
 LIB_OBJECTS := $(LIB_C:%.c=build/%.o)
 PROGRAMS := init sh kalybox
-COMMANDS := echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch sleep ps uname id busy sparse hexdump as fault mem
-.PHONY: all iso disk run clean
+COMMANDS := echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat udp nslookup pendrive sound shutdown
+.PHONY: all iso disk run run-graphic clean
+QEMU_DISPLAY ?= none
+QEMU_AUDIO ?= none
 all: build/KalyOS.iso build/disk.img
 iso: build/KalyOS.iso
 disk: build/disk.img
-build/kernel/%.o: kernel/%.c kernel/include/kaly.h
+build/kernel/%.o: kernel/%.c $(wildcard kernel/include/*.h)
 	@mkdir -p $(@D)
 	$(CC) $(KCFLAGS) -c $< -o $@
+build/kernel/assets/font.o: kernel/assets/console.psf
 build/%.o: %.asm
 	@mkdir -p $(@D)
 	$(NASM) -f elf64 $< -o $@
@@ -60,7 +63,7 @@ build/user/init: build/user/programs/init.o build/user/libc/src/crt0.o build/lib
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
 build/user/sh: build/user/programs/sh.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
-build/user/kalybox: build/user/programs/kalybox.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
+build/user/kalybox: build/user/programs/dns_command.o build/user/programs/sound_command.o build/user/programs/hardware_commands.o build/user/programs/kalybox.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
 build/user/ld-kaly.so: build/user/programs/ld.o build/user/programs/ld_entry.o build/libc.a
 	$(LD) -m elf_x86_64 -shared -Bsymbolic --hash-style=both -z noexecstack -e _dl_entry -o $@ $^
@@ -86,7 +89,23 @@ build/disk.img:
 	mkdir -p build
 	truncate -s 256M $@
 	mke2fs -t ext2 -b 4096 -I 128 -i 1048576 -O none,filetype,sparse_super,large_file -F $@
-run: all
-	qemu-system-x86_64 -L $(QEMU_DATA) -bios $(QEMU_BIOS) -vga none -device VGA,romfile=$(dir $(QEMU_BIOS))vgabios-stdvga.bin -nic none -machine q35 -cpu max -m 512M -smp 4 -cdrom build/KalyOS.iso -drive file=build/disk.img,format=raw,if=none,id=disk -device ide-hd,drive=disk,bus=ide.0 -display none -serial stdio -monitor none -no-reboot
+build/usb.img:
+	mkdir -p build
+	truncate -s 64M $@
+	mke2fs -t ext2 -b 4096 -I 128 -O none,filetype,sparse_super,large_file -F $@
+run: all build/usb.img
+	qemu-system-x86_64 -L $(QEMU_DATA) -bios $(QEMU_BIOS) \
+	    -vga none -device VGA,romfile=$(dir $(QEMU_BIOS))vgabios-stdvga.bin \
+	    -machine q35 -cpu max -m 512M -smp 4 -cdrom build/KalyOS.iso \
+	    -drive file=build/disk.img,format=raw,if=none,id=disk \
+	    -device ide-hd,drive=disk,bus=ide.0 \
+	    -netdev user,id=net0 -device e1000e,netdev=net0,romfile= \
+	    -device qemu-xhci,id=usb -device usb-kbd,bus=usb.0 -device usb-tablet,bus=usb.0 \
+	    -drive file=build/usb.img,format=raw,if=none,id=stick \
+	    -device usb-storage,bus=usb.0,drive=stick \
+	    -audiodev $(QEMU_AUDIO),id=audio -device intel-hda -device hda-output,audiodev=audio \
+	    -display $(QEMU_DISPLAY) -serial stdio -monitor none -no-reboot
+run-graphic:
+	$(MAKE) run QEMU_DISPLAY=gtk QEMU_AUDIO=pa
 clean:
 	rm -rf build

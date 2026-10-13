@@ -86,6 +86,14 @@ static inline uint32_t inl(uint16_t p) {
     __asm__ volatile("inl %1,%0" : "=a"(v) : "Nd"(p));
     return v;
 }
+static inline void outw(uint16_t p, uint16_t v) {
+    __asm__ volatile("outw %0,%1" ::"a"(v), "Nd"(p));
+}
+static inline uint16_t inw(uint16_t p) {
+    uint16_t v;
+    __asm__ volatile("inw %1,%0" : "=a"(v) : "Nd"(p));
+    return v;
+}
 static inline uint64_t rdmsr(uint32_t r) {
     uint32_t a, d;
     __asm__ volatile("rdmsr" : "=a"(a), "=d"(d) : "c"(r));
@@ -112,6 +120,26 @@ char *strcpy(char *, const char *);
 char *strchr(const char *, int);
 uint64_t strtou(const char *, unsigned);
 void console_init(void);
+void framebuffer_init(uint64_t);
+void framebuffer_putc(char);
+void framebuffer_pointer(int, int);
+unsigned framebuffer_width(void);
+unsigned framebuffer_height(void);
+void input_enqueue(uint8_t);
+void input_pointer(int, int, unsigned, bool);
+void input_pointer_absolute(int, int, unsigned);
+void input_wheel(int);
+void touchpad_init(void);
+long input_read(void *, size_t);
+void touchpad_byte(uint8_t);
+void hw_init(void);
+uint64_t hw_time_us(void);
+void hw_delay(unsigned);
+int hw_wait32(volatile uint32_t *, uint32_t, uint32_t, unsigned);
+void *mmio_map(uint64_t, size_t);
+void *pci_mmio(uint8_t, uint8_t, uint8_t, unsigned, size_t);
+void acpi_init(uint64_t);
+int acpi_shutdown(void);
 void console_putc(char);
 void console_write(const char *, size_t);
 int console_read(char *, size_t);
@@ -195,6 +223,7 @@ struct process {
     unsigned fd_flags[MAX_FD];
     struct node *cwd;
     char name[32];
+    uint64_t retry_syscall;
     uint8_t fpu[512] __attribute__((aligned(16)));
 };
 enum { PROC_FREE, PROC_READY, PROC_RUNNING, PROC_SLEEP, PROC_ZOMBIE, PROC_DYING };
@@ -217,6 +246,7 @@ struct blockdev {
     char name[16];
     uint64_t sectors;
     uint32_t sector_size;
+    bool partition, scanned;
     void *private;
     struct extfs *mounted;
     int (*transfer)(struct blockdev *, uint64_t, uint32_t, void *, bool);
@@ -224,11 +254,18 @@ struct blockdev {
 };
 extern struct blockdev *block_devices;
 void block_register(struct blockdev *);
+void block_publish(void);
+void block_scan_partitions(void);
 int block_read(struct blockdev *, uint64_t, uint32_t, void *);
 int block_write(struct blockdev *, uint64_t, uint32_t, const void *);
 uint32_t pci_read(uint8_t, uint8_t, uint8_t, uint8_t);
 void pci_write(uint8_t, uint8_t, uint8_t, uint8_t, uint32_t);
 void pci_init(void);
+void hda_probe(uint8_t, uint8_t, uint8_t);
+long hda_write(const void *, size_t);
+void hda_poll(void);
+long hda_ioctl(unsigned long, uint64_t);
+size_t hda_status(char *, size_t);
 void ahci_probe(uint8_t, uint8_t, uint8_t);
 struct ram_page {
     uint64_t index;
@@ -245,6 +282,7 @@ struct node {
     struct node *parent, *children, *next, *mounted, *origin, *cache_next, *filesystem;
     struct ram_page *pages;
     struct extfs *ext;
+    struct net_socket *socket;
 };
 struct kstat {
     uint64_t dev, ino, nlink;

@@ -1,5 +1,5 @@
 #include "kaly.h"
-static struct lock output_lock, input_lock;
+static struct lock output_lock, input_lock, queue_lock;
 static unsigned row, col;
 static uint8_t input[1024];
 static unsigned head, tail;
@@ -27,6 +27,7 @@ static void emit(char c) {
         __asm__ volatile("pause");
     }
     outb(0x3f8, c);
+    framebuffer_putc(c);
     if (c == '\n') {
         col = 0;
         row++;
@@ -72,12 +73,15 @@ void console_write(const char *s, size_t n) {
     unlock(&output_lock);
 }
 void input_enqueue(uint8_t c) {
+    lock(&queue_lock);
     unsigned next = (head + 1) % sizeof(input);
     if (next == tail) {
+        unlock(&queue_lock);
         return;
     }
     input[head] = c;
     head = next;
+    unlock(&queue_lock);
 }
 int console_read(char *s, size_t n) {
     lock(&input_lock);
@@ -87,10 +91,12 @@ int console_read(char *s, size_t n) {
         input_enqueue(c == '\r' ? '\n' : c);
     }
     size_t done = 0;
+    lock(&queue_lock);
     while (done < n && head != tail) {
         s[done++] = input[tail];
         tail = (tail + 1) % sizeof(input);
     }
+    unlock(&queue_lock);
     unlock(&input_lock);
     return done;
 }

@@ -132,6 +132,8 @@ char *strerror(int e) {
         return "Already exists";
     case 18:
         return "Cross-device link";
+    case 19:
+        return "No such device";
     case 20:
         return "Not a directory";
     case 21:
@@ -140,6 +142,8 @@ char *strerror(int e) {
         return "Invalid argument";
     case 24:
         return "Too many descriptors";
+    case 25:
+        return "Inappropriate ioctl for device";
     case 27:
         return "File too large";
     case 28:
@@ -156,6 +160,44 @@ char *strerror(int e) {
         return "Directory not empty";
     case 40:
         return "Too many symbolic links";
+    case 88:
+        return "Not a socket";
+    case 89:
+        return "Destination address required";
+    case 90:
+        return "Message too long";
+    case 92:
+        return "Protocol option unavailable";
+    case 93:
+        return "Protocol not supported";
+    case 95:
+        return "Operation not supported";
+    case 97:
+        return "Address family not supported";
+    case 98:
+        return "Address already in use";
+    case 99:
+        return "Address not available";
+    case 100:
+        return "Network is down";
+    case 101:
+        return "Network is unreachable";
+    case 104:
+        return "Connection reset";
+    case 106:
+        return "Socket already connected";
+    case 107:
+        return "Socket not connected";
+    case 110:
+        return "Operation timed out";
+    case 111:
+        return "Connection refused";
+    case 113:
+        return "Host unreachable";
+    case 114:
+        return "Operation already in progress";
+    case 115:
+        return "Operation in progress";
     default:
         return "Error";
     }

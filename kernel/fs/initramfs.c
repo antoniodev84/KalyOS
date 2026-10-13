@@ -80,6 +80,21 @@ void vfs_init(uint64_t info) {
         panic("dev memory");
     }
     n->device = 3;
+    n = node_new("dsp", S_IFCHR | 0666, dev);
+    if (!n) {
+        panic("audio node");
+    }
+    n->device = 5;
+    n = node_new("usb", S_IFCHR | 0600, dev);
+    if (!n) {
+        panic("usb node");
+    }
+    n->device = 6;
+    n = node_new("event0", S_IFCHR | 0444, dev);
+    if (!n) {
+        panic("input node");
+    }
+    n->device = 4;
     for (struct blockdev *d = block_devices; d; d = d->next) {
         n = node_new(d->name, S_IFBLK | 0600, dev);
         if (!n) {
@@ -99,6 +114,16 @@ void vfs_init(uint64_t info) {
         }
         n->device = 10 + i;
     }
+    n = node_new("net", S_IFREG | 0444, proc);
+    if (!n) {
+        panic("net node");
+    }
+    n->device = 16;
+    n = node_new("sound", S_IFREG | 0444, proc);
+    if (!n) {
+        panic("sound node");
+    }
+    n->device = 17;
     struct node *sys = vfs_resolve("/sys", root, true, &e);
     if (!sys) {
         sys = vfs_create("/sys", S_IFDIR | 0555, NULL, &e);

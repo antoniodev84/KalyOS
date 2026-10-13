@@ -1,4 +1,4 @@
-#include "kaly.h"
+#include "net.h"
 static struct ram_page *ram_page(struct node *n, uint64_t index, bool create) {
     for (struct ram_page *p = n->pages; p; p = p->next) {
         if (p->index == index) {
@@ -39,6 +39,12 @@ static size_t number(char *b, size_t off, uint64_t v) {
 }
 static size_t proc_data(struct node *n, char *b) {
     size_t off = 0;
+    if (n->device == 17) {
+        return hda_status(b, PAGE);
+    }
+    if (n->device == 16) {
+        return net_status(b, PAGE);
+    }
     if (n->device == 10) {
         off = append(b, off, "MemAvailable: ");
         off = number(b, off, pmm_available() / 1024);
@@ -102,6 +108,9 @@ struct blockdev *vfs_block(struct node *n) {
 }
 long node_read(struct node *n, uint64_t off, void *buf, size_t len) {
     n = node_actual(n);
+    if (n->socket) {
+        return net_socket_read(n->socket, buf, len);
+    }
     if (n->ext) {
         return ext2_read(n, off, buf, len);
     }
@@ -119,6 +128,9 @@ long node_read(struct node *n, uint64_t off, void *buf, size_t len) {
     if ((n->mode & S_IFMT) == S_IFCHR) {
         if (n->device == 1) {
             return console_read(buf, len);
+        }
+        if (n->device == 4) {
+            return input_read(buf, len);
         }
         if (n->device == 3) {
             memset(buf, 0, len);
@@ -164,6 +176,9 @@ long node_read(struct node *n, uint64_t off, void *buf, size_t len) {
 }
 long node_write(struct node *n, uint64_t off, const void *buf, size_t len) {
     n = node_actual(n);
+    if (n->socket) {
+        return net_socket_write(n->socket, buf, len);
+    }
     if (n->ext) {
         return ext2_write(n, off, buf, len);
     }
@@ -182,6 +197,9 @@ long node_write(struct node *n, uint64_t off, const void *buf, size_t len) {
         return len;
     }
     if ((n->mode & S_IFMT) == S_IFCHR) {
+        if (n->device == 5) {
+            return hda_write(buf, len);
+        }
         if (n->device == 1) {
             console_write(buf, len);
         }

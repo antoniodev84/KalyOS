@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <errno.h>
+int hardware_command(const char *, int, char **);
 static int failure(const char *s) {
     perror(s);
     return 1;
@@ -153,12 +154,17 @@ int main(int argc, char **argv) {
     if (!strcmp(cmd, "kalybox")) {
         if (argc == 1) {
             puts("echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch "
-                 "sleep ps uname id busy sparse hexdump as fault mem");
+                 "sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat "
+                 "nslookup pendrive sound shutdown");
             return 0;
         }
         argc--;
         argv++;
         cmd = argv[0];
+    }
+    int hardware_result = hardware_command(cmd, argc, argv);
+    if (hardware_result >= 0) {
+        return hardware_result;
     }
     if (!strcmp(cmd, "echo")) {
         for (int i = 1; i < argc; i++) {

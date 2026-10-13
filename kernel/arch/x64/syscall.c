@@ -1,4 +1,5 @@
-#include "kaly.h"
+#include "net.h"
+#include "usb.h"
 struct syscall_args {
     uint64_t a, b, c, d, e, f;
 };
@@ -246,6 +247,20 @@ static long sys_umount(struct syscall_args *a) {
     }
     return e ? e : vfs_umount(p);
 }
+static long sys_reboot(struct syscall_args *a) {
+    if (self()->uid) {
+        return -EPERM;
+    }
+    if (a->a != 0xfee1dead ||
+        (a->b != 672274793 && a->b != 85072278 && a->b != 369367448 && a->b != 537993216) ||
+        a->c != 0x4321fedc) {
+        return -EINVAL;
+    }
+    lock(&fs_lock);
+    int e = acpi_shutdown();
+    unlock(&fs_lock);
+    return e;
+}
 static long sys_getdents(struct syscall_args *a) {
     return vfs_getdents(a->a, a->b, a->c);
 }
@@ -255,19 +270,20 @@ struct syscall_entry {
     bool filesystem;
 };
 static const struct syscall_entry calls[] = {
-    {0, sys_read, true},       {1, sys_write, true},     {2, sys_open, true},
-    {3, sys_close, true},      {4, sys_stat, true},      {5, sys_fstat, true},
-    {6, sys_lstat, true},      {8, sys_lseek, true},     {9, sys_mmap, true},
-    {10, sys_mprotect, false}, {11, sys_munmap, false},  {12, sys_brk, false},
-    {22, sys_pipe, true},      {102, sys_getuid, false}, {24, NULL, false},
-    {33, sys_dup2, true},      {35, NULL, false},        {39, sys_getpid, false},
-    {57, NULL, false},         {59, NULL, false},        {60, NULL, false},
-    {61, NULL, false},         {63, sys_uname, false},   {79, sys_getcwd, true},
-    {80, sys_chdir, true},     {83, sys_mkdir, true},    {84, sys_rmdir, true},
-    {86, sys_link, true},      {87, sys_unlink, true},   {88, sys_symlink, true},
-    {89, sys_readlink, true},  {90, sys_chmod, true},    {105, sys_setuid, false},
-    {165, sys_mount, true},    {166, sys_umount, true},  {217, sys_getdents, true}};
-_Static_assert(sizeof(calls) / sizeof(calls[0]) == 36, "syscalls");
+    {169, sys_reboot, false}, {0, sys_read, true},       {1, sys_write, true},
+    {2, sys_open, true},      {3, sys_close, true},      {4, sys_stat, true},
+    {5, sys_fstat, true},     {6, sys_lstat, true},      {8, sys_lseek, true},
+    {9, sys_mmap, true},      {10, sys_mprotect, false}, {11, sys_munmap, false},
+    {12, sys_brk, false},     {22, sys_pipe, true},      {102, sys_getuid, false},
+    {24, NULL, false},        {33, sys_dup2, true},      {35, NULL, false},
+    {39, sys_getpid, false},  {57, NULL, false},         {59, NULL, false},
+    {60, NULL, false},        {61, NULL, false},         {63, sys_uname, false},
+    {79, sys_getcwd, true},   {80, sys_chdir, true},     {83, sys_mkdir, true},
+    {84, sys_rmdir, true},    {86, sys_link, true},      {87, sys_unlink, true},
+    {88, sys_symlink, true},  {89, sys_readlink, true},  {90, sys_chmod, true},
+    {105, sys_setuid, false}, {165, sys_mount, true},    {166, sys_umount, true},
+    {217, sys_getdents, true}};
+_Static_assert(sizeof(calls) / sizeof(calls[0]) == 37, "syscalls");
 static int vector_copy(uint64_t user, char ***result) {
     char **v = kalloc(65 * sizeof(*v));
     if (!v) {
@@ -312,6 +328,8 @@ struct frame *syscall_dispatch(struct frame *f) {
     f->flags = (f->flags & 0x240dd5) | 0x202;
     struct syscall_args args = {f->rdi, f->rsi, f->rdx, f->r10, f->r8, f->r9};
     uint64_t nr = f->rax;
+    bool retry = self()->retry_syscall == nr + 1;
+    self()->retry_syscall = 0;
     long result = -ENOSYS;
     if (nr == 60) {
         return process_exit(f, args.a);
@@ -362,6 +380,46 @@ struct frame *syscall_dispatch(struct frame *f) {
         if (!result) {
             return f;
         }
+    } else if (nr == 41) {
+        lock(&fs_lock);
+        result = net_socket_create(args.a, args.b, args.c);
+        unlock(&fs_lock);
+    } else if (nr == 42) {
+        result = net_socket_connect(args.a, args.b, args.c, retry);
+    } else if (nr == 49) {
+        result = net_socket_bind(args.a, args.b, args.c);
+    } else if (nr == 44) {
+        result = net_socket_send(args.a, args.b, args.c, args.d, args.e, args.f);
+    } else if (nr == 45) {
+        result = net_socket_receive(args.a, args.b, args.c, args.d, args.e, args.f);
+    } else if (nr == 55) {
+        result = net_socket_option(args.a, args.b, args.c, args.d, args.e);
+    } else if (nr == 48) {
+        result = net_socket_shutdown(args.a, args.b);
+    } else if (nr == 51 || nr == 52) {
+        result = net_socket_name(args.a, args.b, args.c, nr == 52);
+    } else if (nr == 16) {
+        struct file *file = args.a < MAX_FD ? self()->fds[args.a] : NULL;
+        if (!file) {
+            result = -EBADF;
+        } else if (file->node->device == 5) {
+            result = hda_ioctl(args.b, args.c);
+        } else if (file && file->node->device == 6 && args.b == 0x5501) {
+            if (self()->uid) {
+                result = -EPERM;
+            } else {
+                lock(&fs_lock);
+                usb_init();
+                block_scan_partitions();
+                block_publish();
+                unlock(&fs_lock);
+                result = 0;
+            }
+        } else if (file->node->socket) {
+            result = net_ioctl(args.a, args.b, args.c);
+        } else {
+            result = -25;
+        }
     } else {
         for (unsigned i = 0; i < sizeof(calls) / sizeof(calls[0]); i++) {
             if (calls[i].number == nr && calls[i].call) {
@@ -376,7 +434,14 @@ struct frame *syscall_dispatch(struct frame *f) {
             }
         }
     }
-    if (result == -EAGAIN && (nr == 0 || nr == 1 || nr == 61)) {
+    bool nonblocking = (nr == 44 || nr == 45) && (args.d & 64);
+    if ((nr == 0 || nr == 1 || nr == 42 || nr == 44 || nr == 45) && args.a < MAX_FD &&
+        self()->fds[args.a]) {
+        nonblocking |= (self()->fds[args.a]->flags & 0x800) != 0;
+    }
+    if (result == -EAGAIN && !nonblocking &&
+        (nr == 0 || nr == 1 || nr == 42 || nr == 44 || nr == 45 || nr == 61)) {
+        self()->retry_syscall = nr + 1;
         f->rip -= 2;
         process_sleep(1);
         return schedule(f);

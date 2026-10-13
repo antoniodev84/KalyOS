@@ -1,4 +1,5 @@
-#include "kaly.h"
+#include "net.h"
+#include "usb.h"
 struct idt_gate {
     uint16_t low, selector;
     uint8_t ist, type;
@@ -61,6 +62,9 @@ struct frame *interrupt_dispatch(struct frame *f) {
         process_account();
         c->ticks++;
         if (!c->index) {
+            hda_poll();
+            usb_poll();
+            net_poll();
             process_tick();
         }
         apic_eoi();
