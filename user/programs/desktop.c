@@ -149,7 +149,7 @@ static int refresh(struct gui *g) {
                     struct application *app = &next.apps[next.count++];
                     strcpy(app->path, candidate);
                     strncpy(app->name, name, sizeof(app->name) - 1);
-                    strncpy(app->item.label, !strcmp(name, "rotating-cube") ? "Rotating Cube" : name, sizeof(app->item.label) - 1);
+                    strncpy(app->item.label, !strcmp(name, "rotating-cube") ? "Rotating Cube" : !strcmp(name, "browser") ? "Web Browser" : name, sizeof(app->item.label) - 1);
                 }
                 if (closedir(dir)) {
                     perror(directory);

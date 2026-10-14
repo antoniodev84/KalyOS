@@ -28,7 +28,7 @@ KERNEL_ASM := $(shell find kernel -name '*.asm' | sort) boot/entry.asm
 KERNEL_OBJECTS := $(KERNEL_C:%.c=build/%.o) $(KERNEL_ASM:%.asm=build/%.o) build/boot/ap_blob.o
 LIB_C := $(filter-out user/libc/src/start.c,$(shell find user/libc/src -name '*.c' | sort))
 LIB_OBJECTS := $(LIB_C:%.c=build/%.o) build/user/libc/src/gui_font.o build/user/libc/src/setjmp.o
-PROGRAMS := init sh kalybox desktop terminal files notes
+PROGRAMS := init sh kalybox desktop terminal files notes browser
 COMMANDS := echo cat ls pwd mkdir rm rmdir ln readlink chmod mount umount stat cp mv touch sleep ps uname id busy sparse hexdump as fault mem ifconfig ping wget netstat udp nslookup pendrive sound shutdown window init
 .SECONDARY: $(addprefix build/user/programs/,$(addsuffix .o,$(PROGRAMS)))
 .PHONY: all iso disk run run-graphic clean
@@ -72,7 +72,7 @@ build/user/ld-kaly.so: build/user/programs/ld.o build/user/programs/ld_entry.o b
 	$(LD) -m elf_x86_64 -shared -Bsymbolic --hash-style=both -z noexecstack -e _dl_entry -o $@ $^
 build/user/hello: build/user/programs/hello.o build/user/libc/src/crt0.o build/libc.so
 	$(LD) -m elf_x86_64 -pie --hash-style=both -z noexecstack --dynamic-linker /lib/ld-kaly.so -o $@ $(filter %.o,$^) -Lbuild -lc
-build/initramfs.cpio: $(addprefix build/user/,$(PROGRAMS)) build/user/hello build/user/ld-kaly.so build/libc.a build/libc.so build/user/chibicc-bin build/user/kaly-as build/user/kaly-ld build/user/rotating-cube build/libkalygl.a build/libkalygfx.a tools/initramfs.py
+build/initramfs.cpio: $(addprefix build/user/,$(PROGRAMS)) build/user/hello build/user/ld-kaly.so build/libc.a build/libc.so build/user/chibicc-bin build/user/kaly-as build/user/kaly-ld build/user/rotating-cube build/libkalygl.a build/libkalygfx.a user/browser/home.html tools/initramfs.py
 	mkdir -p build/root/{bin,lib,dev,tmp,proc,sys,mnt,home}
 	chmod 755 build/root build/root/{bin,lib,dev,proc,sys,mnt,home}
 	chmod 1777 build/root/tmp
@@ -86,6 +86,7 @@ build/initramfs.cpio: $(addprefix build/user/,$(PROGRAMS)) build/user/hello buil
 	cp -r user/libc/include/. build/root/usr/include/
 	cp -r shared/include/. build/root/usr/include/
 	cp user/chibicc/include/*.h build/root/usr/include/chibicc/
+	cp user/browser/home.html build/root/home/browser.html
 	cp user/programs/hello_world.c build/root/home/hello.c
 	cp user/programs/rotating_cube.c build/root/home/cube.c
 	cp build/user/rotating-cube build/root/bin/
@@ -166,4 +167,11 @@ build/user/programs/rotating_cube.o: user/programs/rotating_cube.c user/kalygfx/
 	@mkdir -p $(@D)
 	$(CC) $(GFXFLAGS) -c $< -o $@
 build/user/rotating-cube: build/user/programs/rotating_cube.o build/user/libc/src/crt0.o build/libkalygl.a build/libkalygfx.a build/libc.a user/linker.ld
+	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)
+
+BROWSER_SRCS := $(wildcard user/browser/*.c)
+build/browser/%.o: user/browser/%.c user/browser/browser.h $(shell find user/libc/include shared/include -type f)
+	@mkdir -p $(@D)
+	$(CC) $(UCFLAGS) -c $< -o $@
+build/user/browser: $(patsubst user/browser/%.c,build/browser/%.o,$(BROWSER_SRCS)) build/user/programs/dns_command.o build/user/libc/src/crt0.o build/libc.a user/linker.ld
 	$(LD) -m elf_x86_64 -static -z noexecstack -T user/linker.ld -o $@ $(filter %.o %.a,$^)

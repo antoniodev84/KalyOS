@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><title>KalyBrowser Home</title>
+<style>
+body { color: #22334a; background: #f4f7fc; padding: 16px; }
+h1 { color: #145b9c; }
+.card { background: #ffffff; padding: 16px; margin: 8px; border-color: #c9d7e8; }
+#result { color: #168044; font-weight: bold; }
+a { color: #116bb7; }
+</style></head><body>
+<h1>KalyBrowser</h1>
+<p>A small browser with HTML, CSS and its own JavaScript interpreter.</p>
+<div class="card"><h2>Interactive page</h2>
+<p id="result">Running JavaScript...</p>
+<button onclick="increment()">Run JavaScript</button>
+<input id="name" value="KalyOS" type="text">
+<button onclick="greet()">Greet</button>
+</div>
+<div class="card"><h2>Browse</h2>
+<p>Enter an HTTP address above, or open a local HTML file with file:///path.</p>
+<p><a href="http://10.0.2.2:8080/">Open the host HTTP page</a></p>
+<p>Links, GET forms, external stylesheets and external scripts are supported.</p>
+</div>
+<div class="card"><h2>Current subset</h2>
+<ul><li>Headings, paragraphs, nested blocks, lists, links, buttons and text inputs.</li>
+<li>Colors, backgrounds, margins, padding, widths, borders and two font sizes.</li>
+<li>Variables, arithmetic, conditions, loops, functions and DOM text/style updates.</li></ul>
+<p>HTTP only: HTTPS needs TLS. Images display their alternative text. This is not a full web engine.</p>
+<p>Ctrl+L: address | Ctrl+R: reload | Ctrl+Q: close | arrows or mouse wheel: scroll</p>
+</div>
+<script>
+var count = 0;
+var sum = 0;
+for (var i = 1; i <= 5; i++) { sum += i; }
+document.getElementById('result').textContent = 'JavaScript loaded. Sum = ' + sum;
+console.log('Home script: sum=' + sum);
+function increment() {
+    count++;
+    document.getElementById('result').textContent = 'Button clicks: ' + count;
+    document.getElementById('result').style.color = '#1568b4';
+    console.log('Button clicks: ' + count);
+}
+function greet() {
+    document.getElementById('result').textContent = 'Hello, ' + document.getElementById('name').value + '!';
+}
+</script></body></html>
